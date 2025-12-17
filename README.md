@@ -243,6 +243,71 @@ else
 end
 ```
 
+#### SASL + mTLS example (send a single message)
+
+The following is a complete `http` / `server` snippet you can drop into an OpenResty `nginx.conf`. It sends a single message synchronously using SASL/PLAIN for authentication plus mTLS (client certificate) for transport.
+
+```nginx
+http {
+    lua_package_path "/path/to/lua-resty-kafka/lib/?.lua;;";
+
+    server {
+        listen 8080;
+
+        location /send {
+            content_by_lua_block {
+                local cjson = require "cjson"
+                local producer = require "resty.kafka.producer"
+
+                local broker_list = {
+                    {
+                        host = "kafkaserver.example.com",
+                        port = 9093,
+                        sasl_config = {
+                            mechanism = "PLAIN",
+                            user = "your-username",
+                            password = "your-password",
+                        },
+                    },
+                }
+
+                local p = producer:new(broker_list, {
+                    ssl = true,
+                    ssl_verify = true,
+                    ssl_ca_path = "/etc/ssl/certs/kafka-ca-bundle.pem",
+                    ssl_cert_path = "/etc/ssl/certs/client.crt",
+                    ssl_key_path  = "/etc/ssl/private/client.key",
+                    ssl_key_password = nil,
+
+                    producer_type = "sync",
+                    request_timeout = 5000,
+                })
+
+                local topic = "my-topic"
+                local key = "my-key"
+                local message = "hello from ngx_lua with SASL + mTLS"
+
+                local offset, err = p:send(topic, key, message)
+                if not offset then
+                    ngx.status = 500
+                    ngx.say("failed to send message: ", tostring(err))
+                    ngx.log(ngx.ERR, "kafka send error: ", tostring(err))
+                    return
+                end
+
+                ngx.say(cjson.encode({ ok = true, offset = offset }))
+            }
+        }
+    }
+}
+```
+
+Quick test (after reloading OpenResty):
+
+```bash
+curl -sS http://localhost:8080/send
+```
+
 [Back to TOC](#table-of-contents)
 
 #### fetch_metadata
