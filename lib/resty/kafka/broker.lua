@@ -142,8 +142,8 @@ function _M.send_receive(self, request)
     if self.config.ssl and times == 0 then
         -- first connectted connnection
         local ssl_opts = self.config.ssl_verify
-        
-        -- If client certificates or CA certificate are provided, use options table instead of just verify flag
+
+        -- If client certificates or CA certificate are provided, prefer options table
         if self.config.ssl_cert_path or self.config.ssl_key_path or self.config.ssl_ca_path then
             ssl_opts = {
                 client_cert = self.config.ssl_cert_path,
@@ -152,12 +152,27 @@ function _M.send_receive(self, request)
                 cafile = self.config.ssl_ca_path,
             }
         end
-        
-        local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
-        if not ok then
-            return nil, "failed to do SSL handshake with "
-                        ..  self.host .. ":" .. tostring(self.port) .. ": "
-                        .. err, true
+
+        -- Try options-table handshake if we constructed a table; otherwise pass verify flag
+        if type(ssl_opts) == "table" then
+            local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
+            if not ok then
+                ngx.log(ngx.ERR, "sslhandshake with options failed for ", self.host, ":", tostring(self.port), ": ", tostring(err))
+                -- fallback to legacy verify boolean (for older ngx versions that don't accept options table)
+                local ok2, err2 = sock:sslhandshake(false, self.host, self.config.ssl_verify)
+                if not ok2 then
+                    return nil, "failed to do SSL handshake with "
+                                ..  self.host .. ":" .. tostring(self.port) .. ": "
+                                .. err2, true
+                end
+            end
+        else
+            local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
+            if not ok then
+                return nil, "failed to do SSL handshake with "
+                            ..  self.host .. ":" .. tostring(self.port) .. ": "
+                            .. err, true
+            end
         end
     end
 
