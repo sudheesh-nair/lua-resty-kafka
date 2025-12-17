@@ -237,6 +237,10 @@ function _M.new(self, broker_list, client_config)
         keepalive_size = opts.keepalive_size or 2,
         ssl = opts.ssl or false,
         ssl_verify = opts.ssl_verify or false,
+        ssl_cert_path = opts.ssl_cert_path,  -- mTLS client certificate path
+        ssl_key_path = opts.ssl_key_path,    -- mTLS client key path
+        ssl_key_password = opts.ssl_key_password,  -- optional password for encrypted key
+        ssl_ca_path = opts.ssl_ca_path,      -- CA certificate path for server verification
         resolver = opts.resolver -- or nil
     }
 

@@ -141,8 +141,19 @@ function _M.send_receive(self, request)
 
     if self.config.ssl and times == 0 then
         -- first connectted connnection
-        local ok, err = sock:sslhandshake(false, self.host,
-                                          self.config.ssl_verify)
+        local ssl_opts = self.config.ssl_verify
+        
+        -- If client certificates or CA certificate are provided, use options table instead of just verify flag
+        if self.config.ssl_cert_path or self.config.ssl_key_path or self.config.ssl_ca_path then
+            ssl_opts = {
+                client_cert = self.config.ssl_cert_path,
+                client_key = self.config.ssl_key_path,
+                client_key_password = self.config.ssl_key_password,
+                cafile = self.config.ssl_ca_path,
+            }
+        end
+        
+        local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
         if not ok then
             return nil, "failed to do SSL handshake with "
                         ..  self.host .. ":" .. tostring(self.port) .. ": "

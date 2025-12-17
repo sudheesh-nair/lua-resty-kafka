@@ -194,9 +194,54 @@ client config
 
     Specifies if client should perform SSL verification. Defaults to false. See: https://github.com/openresty/lua-nginx-module#tcpsocksslhandshake
 
+* `ssl_cert_path`
+
+    Specifies the path to the client certificate file for mTLS connections. Required when using mutual TLS authentication. The certificate must be in PEM format.
+
+* `ssl_key_path`
+
+    Specifies the path to the client private key file for mTLS connections. Required when using mutual TLS authentication. The key must be in PEM format.
+
+* `ssl_key_password`
+
+    Optional password for encrypted client private key file. Only needed if the private key is password-protected.
+
+* `ssl_ca_path`
+
+    Specifies the path to the CA (Certificate Authority) certificate file for verifying the server certificate. The certificate must be in PEM format. Typically used when `ssl_verify` is set to `true` to validate the server's identity.
+
 * `resolver`
 
     Specifies a function to host resolving, which returns a string of IP or `nil`, to override system default host resolver. Default `nil`, no resolving performed. Example `function(host) if host == "some_host" then return "10.11.12.13" end end`
+
+**Example: Using mTLS (mutual TLS) authentication**
+
+```lua
+local client = require "resty.kafka.client"
+
+local broker_list = {
+    {
+        host = "kafka.example.com",
+        port = 9093,  -- typical mTLS port
+    },
+}
+
+local cli = client:new(broker_list, {
+    ssl = true,
+    ssl_verify = true,
+    ssl_cert_path = "/path/to/client.crt",      -- path to client certificate
+    ssl_key_path = "/path/to/client.key",       -- path to client private key
+    ssl_key_password = "optional_key_password", -- only if key is encrypted
+    ssl_ca_path = "/path/to/ca.crt",            -- CA certificate to verify server
+})
+
+local brokers, partitions = cli:fetch_metadata("topic_name")
+if not brokers then
+    ngx.say("failed to fetch metadata: ", partitions)
+else
+    ngx.say("successfully connected with mTLS")
+end
+```
 
 [Back to TOC](#table-of-contents)
 
@@ -255,7 +300,7 @@ It's recommend to use async producer_type.
 
 An optional options table can be specified. The following options are as follows:
 
-`socket_timeout`, `keepalive_timeout`, `keepalive_size`, `refresh_interval`, `ssl`, `ssl_verify`  are the same as in `client_config`
+`socket_timeout`, `keepalive_timeout`, `keepalive_size`, `refresh_interval`, `ssl`, `ssl_verify`, `ssl_cert_path`, `ssl_key_path`, `ssl_key_password`, `ssl_ca_path` are the same as in `client_config`
 
 producer config, most like in <http://kafka.apache.org/documentation.html#producerconfigs>
 
@@ -454,6 +499,22 @@ client config
 * `ssl_verify`
 
     Specifies if client should perform SSL verification. Defaults to false. See: https://github.com/openresty/lua-nginx-module#tcpsocksslhandshake
+
+* `ssl_cert_path`
+
+    Specifies the path to the client certificate file for mTLS connections. Required when using mutual TLS authentication. The certificate must be in PEM format.
+
+* `ssl_key_path`
+
+    Specifies the path to the client private key file for mTLS connections. Required when using mutual TLS authentication. The key must be in PEM format.
+
+* `ssl_key_password`
+
+    Optional password for encrypted client private key file. Only needed if the private key is password-protected.
+
+* `ssl_ca_path`
+
+    Specifies the path to the CA (Certificate Authority) certificate file for verifying the server certificate. The certificate must be in PEM format. Typically used when `ssl_verify` is set to `true` to validate the server's identity.
 
 * `isolation_level`
 	This setting controls the visibility of transactional records. See: https://kafka.apache.org/protocol.html
