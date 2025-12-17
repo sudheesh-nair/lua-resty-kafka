@@ -141,21 +141,23 @@ function _M.send_receive(self, request)
 
     if self.config.ssl and times == 0 then
         -- first connectted connnection
-        local ssl_opts = self.config.ssl_verify
+        -- Only use options table when we have certs or CA to pass
+        -- Otherwise, use simple boolean verify for better compatibility
+        local use_opts_table = self.config.ssl_cert_path or self.config.ssl_key_path or self.config.ssl_ca_path
 
-        -- If client certificates or CA certificate are provided, prefer options table
-        if self.config.ssl_cert_path or self.config.ssl_key_path or self.config.ssl_ca_path then
-            ssl_opts = {
+        if use_opts_table then
+            -- Use options table for certs/CA
+            local ssl_opts = {
                 client_cert = self.config.ssl_cert_path,
                 client_key = self.config.ssl_key_path,
                 client_key_password = self.config.ssl_key_password,
                 cafile = self.config.ssl_ca_path,
-                verify = self.config.ssl_verify,
             }
-        end
+            -- Only include verify flag if explicitly provided
+            if self.config.ssl_verify ~= nil then
+                ssl_opts.verify = self.config.ssl_verify
+            end
 
-        -- Try options-table handshake if we constructed a table; otherwise pass verify flag
-        if type(ssl_opts) == "table" then
             local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
             if not ok then
                 ngx.log(ngx.ERR, "sslhandshake with options failed for ", self.host, ":", tostring(self.port), ": ", tostring(err))
@@ -168,7 +170,8 @@ function _M.send_receive(self, request)
                 end
             end
         else
-            local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
+            -- No certs/CA: use simple boolean verify flag
+            local ok, err = sock:sslhandshake(false, self.host, self.config.ssl_verify)
             if not ok then
                 return nil, "failed to do SSL handshake with "
                             ..  self.host .. ":" .. tostring(self.port) .. ": "
