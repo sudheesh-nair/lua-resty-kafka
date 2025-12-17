@@ -146,17 +146,44 @@ function _M.send_receive(self, request)
         local use_opts_table = self.config.ssl_cert_path or self.config.ssl_key_path or self.config.ssl_ca_path
 
         if use_opts_table then
-            -- Use options table for certs/CA
-            local ssl_opts = {
-                client_cert = self.config.ssl_cert_path,
-                client_key = self.config.ssl_key_path,
-                client_key_password = self.config.ssl_key_password,
-                cafile = self.config.ssl_ca_path,
-            }
-            -- Only include verify flag if explicitly provided
-            if self.config.ssl_verify ~= nil then
-                ssl_opts.verify = self.config.ssl_verify
+            -- Use options table for certs/CA. Read PEM file contents (the ngx ssl API
+            -- expects PEM text, not file paths) and pass contents to sslhandshake.
+            local function read_pem(path)
+                if not path then
+                    return nil
+                end
+                local f, ferr = io.open(path, "rb")
+                if not f then
+                    return nil, ferr
+                end
+                local content = f:read("*a")
+                f:close()
+                return content
             end
+
+            local client_cert, err_cert = read_pem(self.config.ssl_cert_path)
+            if self.config.ssl_cert_path and not client_cert then
+                return nil, "failed to read client certificate: " .. tostring(err_cert), true
+            end
+
+            local client_key, err_key = read_pem(self.config.ssl_key_path)
+            if self.config.ssl_key_path and not client_key then
+                return nil, "failed to read client key: " .. tostring(err_key), true
+            end
+
+            local cafile, err_ca = read_pem(self.config.ssl_ca_path)
+            if self.config.ssl_ca_path and not cafile then
+                return nil, "failed to read CA file: " .. tostring(err_ca), true
+            end
+
+            local ssl_opts = {
+                client_cert = client_cert,
+                client_key = client_key,
+                client_key_password = self.config.ssl_key_password,
+                cafile = cafile,
+                -- Default to false when using options table (user can set ssl_verify=true to enable verification)
+                verify = self.config.ssl_verify ~= false,
+            }
 
             local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
             if not ok then
