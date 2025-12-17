@@ -183,12 +183,25 @@ function _M.send_receive(self, request)
                 verify = false,
             }
 
+            -- Log non-sensitive info to help debug handshake issues (lengths, presence, verify flag)
+            ngx.log(ngx.DEBUG, "sslhandshake: client_cert_len=", (client_cert and #client_cert) or 0,
+                                  ", client_key_len=", (client_key and #client_key) or 0,
+                                  ", cafile_len=", (cafile and #cafile) or 0,
+                                  ", verify=", tostring(ssl_opts.verify))
+
             local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
             if not ok then
                 ngx.log(ngx.ERR, "sslhandshake with options failed for ", self.host, ":", tostring(self.port), ": ", tostring(err))
-                return nil, "failed to do SSL handshake with "
-                            ..  self.host .. ":" .. tostring(self.port) .. ": "
-                            .. err, true
+                -- Try a boolean handshake fallback (no verification) to see if options table is the issue
+                local ok2, err2 = sock:sslhandshake(false, self.host, false)
+                if ok2 then
+                    ngx.log(ngx.WARN, "sslhandshake: options failed but boolean handshake succeeded for ", self.host)
+                else
+                    ngx.log(ngx.ERR, "sslhandshake boolean fallback also failed for ", self.host, ": ", tostring(err2))
+                    return nil, "failed to do SSL handshake with "
+                                ..  self.host .. ":" .. tostring(self.port) .. ": "
+                                .. err .. "; fallback: " .. tostring(err2), true
+                end
             end
         else
             -- No certs/CA: use simple boolean verify flag
