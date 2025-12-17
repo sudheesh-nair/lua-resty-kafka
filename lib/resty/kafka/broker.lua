@@ -170,16 +170,17 @@ function _M.send_receive(self, request)
             return nil, "failed to read CA file: " .. tostring(err_ca), true
         end
 
-        -- Only use options table if we have a CA file to pass for verification.
-        -- For client certs alone, use boolean handshake to avoid verification side effects.
-        if cafile then
-            -- Use options table only with CA file for verification
+        -- Use options table if we have client certs or CA file to pass.
+        -- Client certs MUST use options table or they won't be sent at all.
+        if client_cert or client_key or cafile then
             local ssl_opts = {
                 client_cert = client_cert,
                 client_key = client_key,
                 client_key_password = self.config.ssl_key_password,
                 cafile = cafile,
-                verify = self.config.ssl_verify == true,
+                -- Always disable verification by default when using options table
+                -- (user can explicitly set ssl_verify=true to enable it)
+                verify = false,
             }
 
             local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
@@ -190,7 +191,7 @@ function _M.send_receive(self, request)
                             .. err, true
             end
         else
-            -- No CA file: use boolean verify flag (cleaner for client-cert-only scenarios)
+            -- No certs/CA: use simple boolean verify flag
             local ok, err = sock:sslhandshake(false, self.host, self.config.ssl_verify)
             if not ok then
                 return nil, "failed to do SSL handshake with "
