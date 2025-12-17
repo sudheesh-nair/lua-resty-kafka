@@ -141,63 +141,56 @@ function _M.send_receive(self, request)
 
     if self.config.ssl and times == 0 then
         -- first connectted connnection
-        -- Only use options table when we have certs or CA to pass
-        -- Otherwise, use simple boolean verify for better compatibility
-        local use_opts_table = self.config.ssl_cert_path or self.config.ssl_key_path or self.config.ssl_ca_path
-
-        if use_opts_table then
-            -- Use options table for certs/CA. Read PEM file contents (the ngx ssl API
-            -- expects PEM text, not file paths) and pass contents to sslhandshake.
-            local function read_pem(path)
-                if not path then
-                    return nil
-                end
-                local f, ferr = io.open(path, "rb")
-                if not f then
-                    return nil, ferr
-                end
-                local content = f:read("*a")
-                f:close()
-                return content
+        -- Read PEM file contents (ngx ssl API expects PEM text, not file paths)
+        local function read_pem(path)
+            if not path then
+                return nil
             end
-
-            local client_cert, err_cert = read_pem(self.config.ssl_cert_path)
-            if self.config.ssl_cert_path and not client_cert then
-                return nil, "failed to read client certificate: " .. tostring(err_cert), true
+            local f, ferr = io.open(path, "rb")
+            if not f then
+                return nil, ferr
             end
+            local content = f:read("*a")
+            f:close()
+            return content
+        end
 
-            local client_key, err_key = read_pem(self.config.ssl_key_path)
-            if self.config.ssl_key_path and not client_key then
-                return nil, "failed to read client key: " .. tostring(err_key), true
-            end
+        local client_cert, err_cert = read_pem(self.config.ssl_cert_path)
+        if self.config.ssl_cert_path and not client_cert then
+            return nil, "failed to read client certificate: " .. tostring(err_cert), true
+        end
 
-            local cafile, err_ca = read_pem(self.config.ssl_ca_path)
-            if self.config.ssl_ca_path and not cafile then
-                return nil, "failed to read CA file: " .. tostring(err_ca), true
-            end
+        local client_key, err_key = read_pem(self.config.ssl_key_path)
+        if self.config.ssl_key_path and not client_key then
+            return nil, "failed to read client key: " .. tostring(err_key), true
+        end
 
+        local cafile, err_ca = read_pem(self.config.ssl_ca_path)
+        if self.config.ssl_ca_path and not cafile then
+            return nil, "failed to read CA file: " .. tostring(err_ca), true
+        end
+
+        -- Only use options table if we have a CA file to pass for verification.
+        -- For client certs alone, use boolean handshake to avoid verification side effects.
+        if cafile then
+            -- Use options table only with CA file for verification
             local ssl_opts = {
                 client_cert = client_cert,
                 client_key = client_key,
                 client_key_password = self.config.ssl_key_password,
                 cafile = cafile,
-                -- Default to false when using options table (user can set ssl_verify=true to enable verification)
-                verify = self.config.ssl_verify ~= false,
+                verify = self.config.ssl_verify == true,
             }
 
             local ok, err = sock:sslhandshake(false, self.host, ssl_opts)
             if not ok then
                 ngx.log(ngx.ERR, "sslhandshake with options failed for ", self.host, ":", tostring(self.port), ": ", tostring(err))
-                -- fallback to legacy verify boolean (for older ngx versions that don't accept options table)
-                local ok2, err2 = sock:sslhandshake(false, self.host, self.config.ssl_verify)
-                if not ok2 then
-                    return nil, "failed to do SSL handshake with "
-                                ..  self.host .. ":" .. tostring(self.port) .. ": "
-                                .. err2, true
-                end
+                return nil, "failed to do SSL handshake with "
+                            ..  self.host .. ":" .. tostring(self.port) .. ": "
+                            .. err, true
             end
         else
-            -- No certs/CA: use simple boolean verify flag
+            -- No CA file: use boolean verify flag (cleaner for client-cert-only scenarios)
             local ok, err = sock:sslhandshake(false, self.host, self.config.ssl_verify)
             if not ok then
                 return nil, "failed to do SSL handshake with "
