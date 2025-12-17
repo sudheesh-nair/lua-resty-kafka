@@ -150,6 +150,7 @@ function _M.send_receive(self, request)
                 client_key = self.config.ssl_key_path,
                 client_key_password = self.config.ssl_key_password,
                 cafile = self.config.ssl_ca_path,
+                verify = self.config.ssl_verify,
             }
         end
 
